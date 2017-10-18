@@ -105,9 +105,21 @@ def test():
 		Field(c).plot_field(ax, True)
 	show()
 
+def test2():
+	
+	sdss = jio.fits.open("../../Data/mastercat/GTR-ADM-QSO-master-sweeps-Feb5-2016.zspec.fits")[1].data
+	RA = sdss['RA']
+	DEC = sdss['DEC']
+	field = Field(8)
+	ra, dec = zip(*((r,d) for r, d in zip(RA, DEC) if field.test_point(r,d)))
+	fig, ax = subplots(1,1)
+	ax.scatter(ra,dec)
+	field.plot_field(ax)
+	show()
+
 if __name__ == '__main__':
 
-	test()
+	test2()
 
 
 
