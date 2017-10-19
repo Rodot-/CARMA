@@ -18,6 +18,9 @@ from JacksTools import jio
 import numpy as np
 from matplotlib.pyplot import subplots, show
 
+from multiprocessing import Process, Pipe, cpu_count, Queue
+from multiprocessing.queues import SimpleQueue, JoinableQueue
+
 FOOTPRINT_FILE="../data/k2-footprint.csv"
 
 class Field:
@@ -125,16 +128,6 @@ class Field:
 		for ccd in self.footprint:
 			yield ccd
 
-def test():
-
-	fig, ax = subplots(1,1)
-	field = Field(0)
-	assert field.test_point(94.94, 27.3773) == 72 # should return 72
-	assert field.test_point(194.94, -87.3773) == 0 # should return 0 (not in field)
-	for c in xrange(0,17):
-		Field(c).plot_field(ax, True)
-	show()
-
 def test2():
 	
 	import sys
@@ -168,7 +161,7 @@ def test2():
 
 if __name__ == '__main__':
 
-	test2()
+	test()
 
 
 
