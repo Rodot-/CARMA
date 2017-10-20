@@ -88,24 +88,24 @@ class Field:
 		return fp
 
 	def __test_channel(self, idx, ra, dec):
-			''' Test if a point at ra and dec are within the bbox of a channel 
-				This works by taking vectors describing the channel edges and
-				taking the cross product with a vector defined by the point relative
-				to the first point in the edge vector.  If the cross product of these
-				vectors is the same sign for all edges, then the point must be contained
-				within the box.  This method is a generator which yeilds a boolean
-				describing the sign of the cross product (True for positive, 
-				False for negative)
-			'''
-			ccd_ra, ccd_dec = self.ra[:,idx], self.dec[:,idx]
-			for i,j in self.grouping:
-				# Compute the edge vector
-				dra, ddec = ccd_ra[j] - ccd_ra[i], ccd_dec[j] - ccd_dec[i]
-				# Compute the point to vertex vector
-				dpra, dpdec = ra - ccd_ra[i], dec - ccd_dec[i]
-				# Compute the cross product
-				pos = dra*dpdec - ddec*dpra
-				yield pos > 0
+		''' Test if a point at ra and dec are within the bbox of a channel 
+			This works by taking vectors describing the channel edges and
+			taking the cross product with a vector defined by the point relative
+			to the first point in the edge vector.  If the cross product of these
+			vectors is the same sign for all edges, then the point must be contained
+			within the box.  This method is a generator which yeilds a boolean
+			describing the sign of the cross product (True for positive, 
+			False for negative)
+		'''
+		ccd_ra, ccd_dec = self.ra[:,idx], self.dec[:,idx]
+		for i,j in self.grouping:
+			# Compute the edge vector
+			dra, ddec = ccd_ra[j] - ccd_ra[i], ccd_dec[j] - ccd_dec[i]
+			# Compute the point to vertex vector
+			dpra, dpdec = ra - ccd_ra[i], dec - ccd_dec[i]
+			# Compute the cross product
+			pos = dra*dpdec - ddec*dpra
+			yield pos > 0
 
 	def __get_bounding_box(self, idx=None):
 		''' get a box that bounds the edge of the field (t,r,b,l)'''
