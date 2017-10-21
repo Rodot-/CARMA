@@ -58,7 +58,6 @@ class Field:
 			if type(label) is bool:
 				label="Campaign %i" % self.campaign
 			ax.text(self.center['ra'], self.center['dec'], str(self.campaign), fontsize = 25)
-			ax.scatter([self.center['ra']], [self.center['dec']])
 
 	def test_point(self, ra, dec):
 		''' test if a point is inside a field, return the channel number '''
@@ -128,7 +127,7 @@ class Field:
 		for ccd in self.footprint:
 			yield ccd
 
-def test2():
+def test():
 	
 	import sys
 	
@@ -143,19 +142,21 @@ def test2():
 				campaign = int(arg[2])
 			else:
 				campaign = int(args[i+1])
-	sdss = jio.fits.open("../../Data/mastercat/GTR-ADM-QSO-master-sweeps-Feb5-2016.zspec.fits")[1].data
-	RA = sdss['RA']
-	RA[RA > 180] -= 360
-	DEC = sdss['DEC']
+
+	hdu = jio.fits.open("../data/GTR-ADM-QSO-master-sweeps-Feb5-2016.zspec.fits")
+	ra = hdu[1].data['RA']
+	ra[ra > 180] -= 360
+	dec = hdu[1].data['DEC']
+	hdu.close()
 	field = Field(campaign)
 	print("Testing Master Catalog on Campaign %i" % campaign)
-	ra, dec = zip(*(coord for coord in zip(RA, DEC) if field.test_point(*coord)))
+	ra, dec = zip(*(coord for coord in zip(ra, dec) if field.test_point(*coord)))
 	print("%i Points Found in Campaign %i" % (len(ra), campaign))
 	if campaign == 8:
 		assert len(ra) == 12805
 	if doShow:
 		fig, ax = subplots(1,1)
-		ax.scatter(ra,dec)
+		ax.scatter(ra,dec, s=1, marker='.', color='r')
 		field.plot_field(ax, True)
 		show()
 
