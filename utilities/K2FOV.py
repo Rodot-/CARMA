@@ -12,16 +12,14 @@ Usage:
 	Can determine if an object lies within a field
 	Tools for placing objects within a k2 campaign field
 '''
-
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from JacksTools import jio
 import numpy as np
 from matplotlib.pyplot import subplots, show
 
-from multiprocessing import Process, Pipe, cpu_count, Queue
-from multiprocessing.queues import SimpleQueue, JoinableQueue
-
-FOOTPRINT_FILE="../data/k2-footprint.csv"
+FOOTPRINT_FILE=os.path.join(BASE_DIR,"../data/k2-footprint.csv")
 
 class Field:
 	''' A single K2 campaign feild
@@ -149,8 +147,12 @@ def test():
 	dec = hdu[1].data['DEC']
 	hdu.close()
 	field = Field(campaign)
-	print("Testing Master Catalog on Campaign %i" % campaign)
-	ra, dec = zip(*(coord for coord in zip(ra, dec) if field.test_point(*coord)))
+	#print("Testing Master Catalog (%i points) on Campaign %i" % (len(ra), campaign))
+	res = zip(*(coord for coord in zip(ra, dec) if field.test_point(*coord)))
+	if res:
+		ra, dec = res
+	else:
+		ra, dec = [], []
 	print("%i Points Found in Campaign %i" % (len(ra), campaign))
 	if campaign == 8:
 		assert len(ra) == 12805
