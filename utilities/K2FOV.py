@@ -28,12 +28,14 @@ class Field:
 			test_point
 	This thing sort of works as a state machine underneath
 	'''
-	data = jio.load(FOOTPRINT_FILE, headed=True, delimiter=',')
+	data = None
 	# This array of tuples iterates over adjacent edges of a square
 	grouping = zip(np.arange(4), (np.arange(4)+1)%4)
 
 	def __init__(self, campaign, cache_data=True):
 
+		if Field.data is None:
+			Field.data = jio.load(FOOTPRINT_FILE, headed=True, delimiter=',')
 		self.campaign = campaign
 		self.cache = cache_data
 		self.footprint = self._get_campaign(campaign)
@@ -55,7 +57,8 @@ class Field:
 		if label: # You can set the label to True or a string
 			if type(label) is bool:
 				label="Campaign %i" % self.campaign
-			ax.text(self.center['ra'], self.center['dec'], str(self.campaign), fontsize = 25)
+			top, right, bottom, left = self.bounding_box
+			ax.text(left, top, str(self.campaign), fontsize = 25)
 
 	def test_point(self, ra, dec):
 		''' test if a point is inside a field, return the channel number '''
@@ -128,24 +131,35 @@ class Field:
 def test():
 	
 	import sys
-	
+
 	args = sys.argv[1:]
 	doShow = False
 	campaign = 8
 	for i,arg in enumerate(args):
 		if arg in ('-s','--show'):
 			doShow = True
-		if arg[:2] == '-c':
+		elif arg[:2] == '-c':
 			if arg[2:]:
-				campaign = int(arg[2])
+				campaign = int(arg[2:])
 			else:
 				campaign = int(args[i+1])
+		elif arg[:2] == '-f':
+			if arg[2:]:
+				FOOTPRINT_FILE = arg[2:]
+			else:
+				FOOTPRINT_FILE = args[i+1]
+			print "Using Footprint File: %s" % FOOTPRINT_FILE
+			Field.data = jio.load(FOOTPRINT_FILE, headed=True, delimiter=',')
 
-	hdu = jio.fits.open("../data/GTR-ADM-QSO-master-sweeps-Feb5-2016.zspec.fits")
-	ra = hdu[1].data['RA']
-	ra[ra > 180] -= 360
-	dec = hdu[1].data['DEC']
-	hdu.close()
+	if not sys.stdin.isatty():
+		coords = sys.stdin.read().strip().split()
+		ra, dec = np.array(map(float, coords)).reshape(2,-1)
+	else:	
+		hdu = jio.fits.open("../data/GTR-ADM-QSO-master-sweeps-Feb5-2016.zspec.fits")
+		ra = hdu[1].data['RA']
+		ra[ra > 180] -= 360
+		dec = hdu[1].data['DEC']
+		hdu.close()
 	field = Field(campaign)
 	#print("Testing Master Catalog (%i points) on Campaign %i" % (len(ra), campaign))
 	res = zip(*(coord for coord in zip(ra, dec) if field.test_point(*coord)))
@@ -155,7 +169,7 @@ def test():
 		ra, dec = [], []
 	print("%i Points Found in Campaign %i" % (len(ra), campaign))
 	if campaign == 8:
-		assert len(ra) == 12805
+		assert len(ra) == 12805 or not sys.stdin.isatty()
 	if doShow:
 		fig, ax = subplots(1,1)
 		ax.scatter(ra,dec, s=1, marker='.', color='r')
