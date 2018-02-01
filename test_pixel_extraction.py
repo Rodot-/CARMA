@@ -53,6 +53,7 @@ class LoadingBar:
 	
 DEBUG=0
 EPIC=220176624
+SEP=1.55555 #0.5
 N_TILES = 2
 if sys.argv[1:]:
 	N_TILES = int(sys.argv[1]) - 1
@@ -114,7 +115,7 @@ def getClosestObjects(EPIC):
 		#sep = q_coord.separation(c)
 		#if q_coord.separation(c).is_within_bounds('0d','0.5d'):
 		#if sep.degree < 0.5:
-		if sep < 0.5:
+		if sep < SEP:
 			close_coords.append((r, d, sep))
 			#close_coords.append((r, d, sep.degree))
 	print "  Found %i objects out of %i tested..." % (len(close_coords), i)
@@ -149,8 +150,10 @@ N_TILES=len(query)
 EPICs = []
 Dates = []
 #coords = []
+print "EPICS:"
 for q in query:
 	EPICs.append(int(q[0]))
+	print "  ",EPICs[-1]
 	start, end = q[8:10]
 	start = datetime.datetime.strptime(start, '%Y-%m-%d %X')
 	end = datetime.datetime.strptime(end, '%Y-%m-%d %X')
@@ -158,15 +161,28 @@ for q in query:
 	Dates.append([start, delta])
 hdus = []
 lcs = []
+apmasks = []
 print "Getting Target Pixels..."
 APERTURES = ['CIRC_APER0','CIRC_APER9']
+APERTABLE='CIRC_APER_TBL'
 
+def generateOutline(target_grid):
+	'''generate the outline of an aperture'''
+	indices = zip(*np.where(target_grid))
+	locs = []
+	for i,j in indices:
+		locs.append([(i+0.5*k,j+0.5*l) for k in (-1,1) for l in (-1,1)])
+	locs = [l for loc in locs for l in loc]
+	locs = [l for l in locs if locs.count(l) < 3] # No center objects
+	return zip(*locs)
 
 for EPIC in EPICs[:N_TILES]:
 	hdus.append(np.asarray(downloader.download_target_pixels(EPIC, campaign)[1].data))
 
 	LC = downloader.downloadVJ(EPIC, campaign)
 	lcs.append([np.asarray(LC[APER].data) for APER in APERTURES])
+	grids = [np.asarray(LC[APERTABLE].data[int(APER[-1])]) for APER in APERTURES]
+	apmasks.append(grids)
 
 def match_times(d1, d2):
 	'''d1 is the target pixel file
@@ -217,7 +233,7 @@ def update_target_pixels(ax, data, hdus, times, EPICs, lcs, lcs_data, masks, i):
 		was_not_masked = []
 		for a, d, hdu, t, e, m in zip(ax.flat[::2], data, hdus, times, EPICs, masks):
 			if hdu[DATA].shape[0] > i:
-				d.set_data(hdu[DATA][i])
+				d[0].set_data(hdu[DATA][i])
 				tt = t[i]
 			if m[i]:
 				was_not_masked.append(sum(m[:i]))
@@ -225,7 +241,8 @@ def update_target_pixels(ax, data, hdus, times, EPICs, lcs, lcs_data, masks, i):
 				was_not_masked.append(False)
 			a.draw_artist(a.set_title('EPIC ' + str(e)))
 			a.draw_artist(a.patch)
-			a.draw_artist(d)
+			for d_ in d:
+				a.draw_artist(d_)
 		for a, data, lc, wnm in zip(ax.flat[1::2], lcs_data, lcs, was_not_masked):
 			if wnm:
 				i = wnm
@@ -239,13 +256,15 @@ def update_target_pixels(ax, data, hdus, times, EPICs, lcs, lcs_data, masks, i):
 				a.draw_artist(d) 
 		return tt
 
-for a,hdu,t,e in zip(ax.flat[::2], hdus, Dates, EPICs):
+for a,hdu,t,e,am in zip(ax.flat[::2], hdus, Dates, EPICs, apmasks):
 	a.axis('off')
 	mean_pixel = np.nanmean(np.nanmax(np.nanmax(hdu[DATA], axis=1), axis=1))
 	std_pixel = np.nanstd(hdu[DATA])
 	max_pixel = mean_pixel + 3 * std_pixel
 	min_pixel = np.nanmin(hdu[DATA])
-	data.append(a.imshow(hdu[DATA][0], cmap = 'binary', vmin=min_pixel, vmax=max_pixel))
+	data.append([a.imshow(hdu[DATA][0], cmap = 'binary', vmin=min_pixel, vmax=max_pixel)])
+	data[-1].append(a.imshow(am[0], cmap='Blues', vmin=0, vmax=1, alpha=0.2))
+	data[-1].append(a.imshow(am[1], cmap='Reds', vmin=0, vmax=1, alpha=0.2))
 	a.set_title('EPIC ' + str(e))
 	ts = hdu['TIME']
 	t_delta = ts-ts[~np.isnan(ts)].min()
