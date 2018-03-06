@@ -79,6 +79,21 @@ class Field:
 		return 0
 
 	@classmethod
+	def get_channels(self, module):
+		'''get the channel numbers associated with the module'''
+		return sorted(list(set(self.data['channel'][self.data['module'] == module])))
+	
+	@classmethod
+	def get_module(self, channel):
+		'''get the module associated with a channel'''
+		return self.data['module'][self.data['channel'] == channel][0]
+	
+	@classmethod
+	def get_modules(self):
+		'''get a list of all modules'''
+		return sorted(list(set(self.data['module'])))
+
+	@classmethod
 	def _get_campaign(self, campaign):
 		''' get the footprint of a campaign '''
 		fp = self.data[self.data['campaign'] == campaign]
