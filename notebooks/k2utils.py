@@ -8,7 +8,7 @@ import time
 import thread
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-from matplotlib import animation, rc
+from matplotlib import animation, rc, ticker
 from IPython.display import HTML
 from matplotlib.pyplot import subplots, show, pause, get_fignums, figure, subplot, cm
 import matplotlib.patches as patches
@@ -25,12 +25,11 @@ from StringIO import StringIO
 from eventlet.green import urllib2 as urllibg
 from eventlet import GreenPool
 from functools import partial
-from itertools import imap, izip
+from itertools import imap, izip, cycle
 from io import BytesIO, BufferedReader
 import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
-from mpl_toolkits.axes_grid.inset_locator import inset_axes
-
+import csv
 
 N=3853
 # Everything down to cell 7 is imports and definitions, watch for errors!
@@ -49,12 +48,16 @@ def searchProposal(Proposal, campaign = 8): #Seach a proposal number for EPIC ID
     
     return Result
 
-def search(target_file):
-    data = jio.load(target_file, delimiter=', ', headed=True)
+def search(target_file, campaign=8):
+    with open(target_file,'r') as f:
+        reader = csv.DictReader(f)
+        data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)])))
+    #data = jio.load(target_file, delimiter=', ', headed=True)
     EPIC = data['EPIC ID']
-    RA = map(float, filter(None,data['RA (J2000) [deg]']))
-    DEC = map(float, filter(None,data['Dec (J2000) [deg]']))
-    MAG = map(float, filter(None,data['magnitude']))
+    func = lambda x: float(x) if x else None
+    RA = map(func, data['RA (J2000) [deg]'])
+    DEC = map(func, data['Dec (J2000) [deg]'])
+    MAG = map(func, data['magnitude'])
     return {epic: (mag, ra, dec) for epic, mag, ra, dec in zip(EPIC, MAG, RA, DEC)}
 
 def chunker(socket, CHUNK_SIZE=1024*256):
@@ -71,9 +74,10 @@ def concurrent_downloader(url):
     try:
         #socket = urllibg.urlopen(url)
         socket = urllib2.urlopen(url)
-    except urllibg.URLError:
-        print "Timed Out:", url
-        return None
+    except urllib2.URLError as e:
+        print >>sys.stderr, e
+        #print "Timed Out:", url
+        return url, None
     
     raw = socket.read()
     socket.close()
@@ -84,14 +88,17 @@ def fits_downloader(urls):
     '''Downloads multiple fits files concurrently and yields them as a generator'''
     
     #pool = GreenPool(size=20)
-    pool = ThreadPoolExecutor(4)
+    pool = ThreadPoolExecutor(20)
     futures = [pool.submit(concurrent_downloader, url) for url in urls]
-    wait(futures)
+    #wait(futures)
     #for url, raw in pool.imap(concurrent_downloader, urls):
     #for r in as_completed(futures):
     for r in futures:
+        wait([r])
         url, raw = r.result()
-        
+        if raw is None:
+            yield None
+            continue
         if url.endswith('.gz'): # the target pixels are compressed
             
             stream = BytesIO(raw)
@@ -107,7 +114,7 @@ def fits_downloader(urls):
         
         yield hdu
         
-        buff.close()
+        #buff.close()
 
 
 def campaign_wrapper(func, campaign):
@@ -175,7 +182,7 @@ def magToFlux(mag):
 
 def fluxToMag(flux):
 
-	return np.log10(flux/1.74e5)/(-0.4)+12
+    return np.log10(flux/1.74e5)/(-0.4)+12
 '''
 K2FOV.py - Tools for working with k2 fields
 
@@ -206,6 +213,16 @@ from matplotlib.pyplot import subplots, show
 
 FOOTPRINT_FILE=os.path.join(BASE_DIR,"data/k2-footprint.csv")
 
+def load_fields(footprint_file):
+    '''load up the kepler fields of view from the csv file'''
+    with open(footprint_file,'r') as f:
+        dtypes = ('u8',)+('datetime64[D]',)*2+('u8',)*3+('f8',)*8
+        reader = csv.DictReader(f)
+        fields = reader.fieldnames
+        raw = [tuple(row[field] for field in fields) for row in reader]
+        data = np.array(raw, dtype=zip(fields, dtypes))
+    return data
+
 class Field:
     ''' A single K2 campaign feild
         Relevant methods for end user:
@@ -213,7 +230,8 @@ class Field:
             test_point
     This thing sort of works as a state machine underneath
     '''
-    data = jio.load(FOOTPRINT_FILE, headed=True, delimiter=',')
+    #data = jio.load(FOOTPRINT_FILE, headed=True, delimiter=',')
+    data = load_fields(FOOTPRINT_FILE)
     # This array of tuples iterates over adjacent edges of a square
     grouping = zip(np.arange(4), (np.arange(4)+1)%4)
 
@@ -335,7 +353,7 @@ downloader = DummyModule({'downloadVJ':downloadVJ,
 class LoadingBar:
 
 
-    def __init__(self):
+    def __init__(self, bar=False):
 
         self.is_running = True
         #self.mapping = '_.-^-.'
@@ -348,6 +366,8 @@ class LoadingBar:
         self.clock = 0
         self.prev_est = []
         self.percentage_est = 0
+        if bar:
+            self.set_as_bar()
 
         
     def print_loading_bar(self):
@@ -373,9 +393,9 @@ class LoadingBar:
         while self.is_running:
             t_remain = self.est_remaining()
             for j in xrange(len(self.mapping)):
-                sys.stdout.write(self.blank)
+                sys.stdout.flush()
                 string = "[" + "#"*self.n +self.mapping[j] + '.'*(self.N-1-self.n) + "] " + t_remain
-                sys.stdout.write(string)
+                sys.stdout.write(self.blank+string)
                 sys.stdout.flush()
                 if not self.is_running:
                     self.done = True
@@ -393,7 +413,7 @@ class LoadingBar:
             p = self.percentage_est
             est = delta/p*(1-p)
             self.prev_est.append(est)
-            max_terms = (min((self.N-self.n, self.n))+1)*4
+            max_terms = max((min((self.N-self.n, self.n))+1)*4,31)
             min_terms = 30 # central limit theorem!
             if self.n > self.N / 2:
                 min_terms = 1
@@ -422,6 +442,13 @@ class LoadingBar:
         self.percentage_est = percentage
         self.est_remaining() # This will update our estimate faster
 
+
+    def reset(self):
+    
+        self.clock = time.time()
+        self.prev_est = []
+        self.percentage_est = 0
+
     def __enter__(self):
 
         self.clock = time.time()
@@ -429,6 +456,7 @@ class LoadingBar:
         self.percentage_est = 0
         self.done=False
         self.is_running=True
+        print ""
         thread.start_new_thread(self.print_loading_bar, ())
         return self
 
@@ -438,7 +466,8 @@ class LoadingBar:
         self.is_running = False
         while not self.done:
             time.sleep(0.001)
-        sys.stdout.write(self.blank)
+        #sys.stdout.write(self.blank)
+        print ""
         sys.stdout.flush()
         self.n = 1
         self.clock = 0
@@ -483,19 +512,75 @@ DATA="RAW_CNTS"
 
 CCD = namedtuple('CCD', ['module', 'channel', 'field', 'campaign'], verbose=False)
 
-class BasicFitsContainer:
-    
-    def __init__(self, hdu, field, **kwargs):
-        if hdu is not None:
-            self.pixels = np.array(copy(hdu[1].data[field]))
-            self.m, self.n = self.pixels[0].shape #WARNING! I swapped n and m, make sure that is right (it is)
-            self.col = hdu[1].header['1CRV9P']
-            self.row = hdu[1].header['2CRV9P']
-            #print self.row, self.row+self.m, self.col, self.col+self.n, np.sum(self.pixels[0])
-            del hdu[1].data
-            del hdu
-        else:
+class BasicFitsContainer(object):
+   
+    ftypes = ('PIX','VJ','EV') # Which fits file format we're working with
+    constructors = {}
+
+    def __new__(cls, *args, **kwargs):
+
+        if not cls.constructors:
+            cls.constructors.update(dict(zip(cls.ftypes, (cls.load_target_pixels, cls.load_vj_lc, cls.load_everest_lc))))
+        #cls.__new__ = super(BasicFitsContainer, cls).__new__
+        cls.__new__ = cls.default_new
+        return cls.__new__(cls)
+
+    @classmethod
+    def default_new(cls, *args, **kwargs):
+        '''the default __new__ method for instantiation'''
+
+        return object.__new__(cls)
+
+    def __init__(self, ftype, *args, **kwargs):
+
+        if ftype is None:
             self.__dict__.update(kwargs)
+        else:
+            assert ftype in self.ftypes, "Invalid File Type"
+            constructor = self.constructors[ftype]
+            self.__dict__.update(constructor(self, *args, **kwargs))
+   
+    def load_vj_lc(self, hdu, *fields):
+        '''load a Vanderburg Johnson LC'''
+       
+        kwargs = {} 
+        for field in fields:
+            kwargs.update({field:np.array(copy(hdu[1].data[field]))})
+        kwargs['t'] = np.array(copy(hdu[1].data['T']))
+        kwargs['EPIC'] = copy(hdu[0].header['KEPLERID'])
+        kwargs['processing'] = 'VJ'
+        del hdu[1].data
+        #del hdu[0].header
+        del hdu
+        return kwargs
+
+    def load_everest_lc(self, hdu, *fields):
+        '''load an EVEREST lc'''
+
+        kwargs = {} 
+        for field in fields:
+            kwargs.update({field:np.array(copy(hdu[1].data[field]))})
+        kwargs['t'] = np.array(copy(hdu[1].data['TIME']))
+        kwargs['EPIC'] = copy(hdu[0].header['KEPLERID'])
+        kwargs['processing'] = 'EVEREST'
+        del hdu[1].data
+        #del hdu[0].header
+        del hdu
+        return kwargs
+
+    def load_target_pixels(self, hdu, field):
+        '''Instantiate a target pixel container'''
+
+        kwargs = {}
+        kwargs['pixels'] = np.array(copy(hdu[1].data[field]))
+        kwargs['m'], kwargs['n'] = self.pixels[0].shape #WARNING! I swapped n and m, make sure that is right (it is)
+        kwargs['col'] = copy(hdu[1].header['1CRV9P'])
+        kwargs['row'] = copy(hdu[1].header['2CRV9P'])
+        kwargs['EPIC'] = copy(hdu[0].header['KEPLERID'])
+        del hdu[1].data
+        #del hdu[0].header
+        del hdu
+        return kwargs
         
 class PixelMapContainer:
     
@@ -509,14 +594,12 @@ class PixelMapContainer:
             if not self.isgenerator:
                 self.load(bar)
 
-                
-
     def load(self, bar=None):
                 
         for i, hdu in enumerate(getPixels(self.objs.iterkeys(), self.ccd.campaign)):
             if bar is not None:
                 bar.update_bar(1.0*i/len(self.objs.keys()))
-            self.containers.append(BasicFitsContainer(hdu, self.ccd.field))
+            self.containers.append(BasicFitsContainer('PIX', hdu, self.ccd.field))
             hdu.close()
             del hdu
             gc.collect()
@@ -636,6 +719,35 @@ def make_pixel_map_name(ccd):
     return "K2c{}m{}ch{}_{}".format(ca, mo, ch, "flux" if fi == "FLUX" else "raw")
 
 
+def copy_pixel_map(ccd):
+    '''run only once, to copy the old save format to the new one'''
+    loader = LoadingBar()
+    loader.set_as_bar()
+    hdf5_file = "../data/PixelMaps/K2PixelMap.hdf5"
+    group_name = make_pixel_map_name(ccd)
+    with h5py.File(hdf5_file, 'a') as f:
+        print("  Generating Target Pixel Container...")
+        cont = load_pixel_map(ccd)
+        cont.objs.update(getObjects(ccd))
+        print("  Copying... (Do Not Turn off Device or Stop Kernel)\n")
+        with loader:
+            for i, (epic, g) in enumerate(izip(cont.objs.iterkeys(), cont)):
+                new_name = "/".join((group_name, str(epic)))
+                old_name = "/".join((group_name, str(i)))
+                if new_name not in f:
+                    f[new_name+'/idx'] = f[old_name+'/idx']
+                    f[new_name+'/data'] = f[old_name+'/data']
+
+                    del f[old_name+'/data']
+                    del f[old_name+'/idx']
+                if old_name in f:
+                    del f[old_name]
+                loader.update_bar(i*1.0/len(cont))
+            loader.update_bar(1)
+        del cont
+    return ccd
+ 
+
 def save_pixel_map(ccd):
     loader = LoadingBar()
     loader.set_as_bar()
@@ -645,11 +757,10 @@ def save_pixel_map(ccd):
         print("  Generating Target Pixel Container...")
         with loader:
             cont = PixelMapContainer(ccd, generator=True)
-        print("  Writing...")
+        print("  Writing... (Do Not Turn off Device or Stop Kernel)")
         with loader:
             for i, g in enumerate(cont):
-                dset=None
-                name = "/".join((group_name, str(i)))
+                name = "/".join((group_name, str(g.EPIC)))
                 if name not in f:
                     f.create_dataset(name+'/idx', data=np.array([g.m,g.n,g.row,g.col]))
                     f.create_dataset(name+'/data', data=g.pixels)
@@ -673,10 +784,11 @@ def load_pixel_map(ccd):
         with loader:
             group = f[group_name]
             for i,name in enumerate(group):
+                #if int(name) < 1000: continue
                 loader.update_bar(1.0*i/len(group))
                 pixels = np.array(group[name]['data'])
                 m,n,row,col = np.array(group[name]['idx'])
-                hdu = BasicFitsContainer(None, None, pixels=pixels, m=m, n=n, row=row, col=col)
+                hdu = BasicFitsContainer(None, pixels=pixels, m=m, n=n, row=row, col=col, EPIC=int(name))
                 cont.containers.append(hdu)
             loader.update_bar(1)
     gc.collect()
@@ -686,11 +798,11 @@ def percentile_mask(lower, upper, field='FLUX'):
     def _percentile_mask(data):
         if field == 'RAW_CNTS':
             if len(data[data>0]):
-                low, up = np.nanpercentile(data[data>0],[lower,upper])
+                low, up = np.percentile(data[data>0],[lower,upper])
             else:
                 low, up = -np.inf, np.inf
             return (low < data) & (data < up) & (data > 0)
-        low, up = np.nanpercentile(data,[lower,upper])
+        low, up = np.percentile(data,[lower,upper])
         return (low < data) & (data < up)
     _percentile_mask.__doc__ = '''{0:>4.1f}\% to {1:>5.1f}\%'''.format(lower, upper).replace(' ','\ ')
     return _percentile_mask
