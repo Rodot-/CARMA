@@ -1,4 +1,5 @@
 import urllib2
+import warnings
 import re
 import sys
 from astropy.io import fits
@@ -31,8 +32,15 @@ import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 import csv
 
+
+VERBOSE=True
 N=3853
 # Everything down to cell 7 is imports and definitions, watch for errors!
+
+def printv(*args):
+
+    if VERBOSE:
+        print ("{} "*len(args)).format(*args)
 
 def searchProposal(Proposal, campaign = 8): #Seach a proposal number for EPIC IDs, returns a dict with EPIC IDs as keys to RA and DEC coords
 
@@ -54,11 +62,11 @@ def search(target_file, campaign=8):
         data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)])))
     #data = jio.load(target_file, delimiter=', ', headed=True)
     EPIC = data['EPIC ID']
-    func = lambda x: float(x) if x else None
+    func = lambda x: float(x) if (x and x not in ['None',' ']) else None
     RA = map(func, data['RA (J2000) [deg]'])
     DEC = map(func, data['Dec (J2000) [deg]'])
     MAG = map(func, data['magnitude'])
-    return {epic: (mag, ra, dec) for epic, mag, ra, dec in zip(EPIC, MAG, RA, DEC)}
+    return {int(epic): (mag, ra, dec) for epic, mag, ra, dec in zip(EPIC, MAG, RA, DEC) if None not in (mag, ra, dec)}
 
 def chunker(socket, CHUNK_SIZE=1024*256):
     
@@ -70,31 +78,38 @@ def chunker(socket, CHUNK_SIZE=1024*256):
 
 def concurrent_downloader(url):
     '''returns a file object that can be opened by astropy fits'''
-    
+   
     try:
         #socket = urllibg.urlopen(url)
         socket = urllib2.urlopen(url)
+        raw = socket.read()
     except urllib2.URLError as e:
-        print >>sys.stderr, e
+        print >>sys.stderr, e, url
+        print "Reason:",e.reason 
         #print "Timed Out:", url
         return url, None
-    
-    raw = socket.read()
-    socket.close()
-        
+    finally:
+        try:
+            socket.close()
+        except NameError:
+            pass
+
     return url, raw
 
-def fits_downloader(urls):
+def fits_downloader(urls, ordered=True):
     '''Downloads multiple fits files concurrently and yields them as a generator'''
     
     #pool = GreenPool(size=20)
-    pool = ThreadPoolExecutor(20)
+    pool = ThreadPoolExecutor(100) # making this too big will cause timeouts
     futures = [pool.submit(concurrent_downloader, url) for url in urls]
     #wait(futures)
     #for url, raw in pool.imap(concurrent_downloader, urls):
-    #for r in as_completed(futures):
-    for r in futures:
-        wait([r])
+    iterator = futures
+    if not ordered:
+        iterator = as_completed(futures)
+    for r in iterator:
+        if ordered:
+            wait([r])
         url, raw = r.result()
         if raw is None:
             yield None
@@ -137,6 +152,15 @@ def get_everest_url(EPIC, campaign):
     base_name = "hlsp_everest_k2_llc_%s-c%02i_kepler_v2.0_lc.fits" % (EPIC, campaign)
     filename = '/'.join((base_url, path, base_name))
     return filename
+
+def get_lc_url(EPIC, campaign):
+    EPIC = str(EPIC)
+    base_url = "https://archive.stsci.edu/missions/k2/lightcurves"
+    path = "c%i/%s00000/%s000" % (campaign, EPIC[:4], EPIC[4:6])
+    base_name = "ktwo%s-c%02i_llc.fits" % (EPIC, campaign)
+    filename = '/'.join((base_url, path, base_name))
+    return filename
+
 
 def get_target_pixel_url(EPIC, campaign):
     
@@ -489,7 +513,13 @@ def getObjects(ccd):
     '''input arg "channel" now refers to an index 0-3'''
     channel = Field.get_channels(ccd.module)[ccd.channel]
     objs = searchProposal("GO", ccd.campaign)
+    printv("Found {} objects from VJ database".format(len(objs)))
+    n_objs = len(objs)
+    objs.update(search("../data/GO_all_campaigns_to_date_extra.csv"))
+    printv("Found {} objects from GO_all_campaigns_to_date.csv".format(len(objs)-n_objs))
+    n_objs = len(objs)
     objs = dict(filter(moduleFilter(ccd), objs.iteritems()))
+    printv("Removed {} objects from outside the ccd region".format(n_objs-len(objs)))
     return objs
 
 #Grab the target pixels (or at least see if the computer can handle them)
@@ -501,7 +531,7 @@ def getPixels(epics, campaign):
     
     pixel_url_generator = campaign_wrapper(get_target_pixel_url, campaign)
     urls = imap(pixel_url_generator, epics)
-    for hdu in fits_downloader(urls):
+    for hdu in fits_downloader(urls, False):
         yield hdu
 
 
@@ -568,12 +598,14 @@ class BasicFitsContainer(object):
         del hdu
         return kwargs
 
-    def load_target_pixels(self, hdu, field):
+    def load_target_pixels(self, hdu, *fields):
         '''Instantiate a target pixel container'''
 
         kwargs = {}
-        kwargs['pixels'] = np.array(copy(hdu[1].data[field]))
-        kwargs['m'], kwargs['n'] = self.pixels[0].shape #WARNING! I swapped n and m, make sure that is right (it is)
+        for field in fields:
+            kwargs.update({field:np.array(copy(hdu[1].data[field]))})
+        kwargs['pixels'] = np.array(copy(hdu[1].data['FLUX']))
+        kwargs['m'], kwargs['n'] = kwargs['pixels'][0].shape #WARNING! I swapped n and m, make sure that is right (it is)
         kwargs['col'] = copy(hdu[1].header['1CRV9P'])
         kwargs['row'] = copy(hdu[1].header['2CRV9P'])
         kwargs['EPIC'] = copy(hdu[0].header['KEPLERID'])
@@ -587,28 +619,76 @@ class PixelMapContainer:
     def __init__(self, ccd, bar = None, init=True, generator=False):
         self.ccd = ccd
         self.containers = []
+        self.exclusions = []
         self.objs = {}
+        self.epic_map = {}
         self.isgenerator = generator
         if init:
             self.objs.update(getObjects(ccd))
             if not self.isgenerator:
-                self.load(bar)
+                self.load(bar=bar)
 
-    def load(self, bar=None):
+    def exclude_epic(self, *EPICs):
+
+        for EPIC in EPICs:
+            if EPIC not in self.epic_map:
+                raise KeyError("{} not in PixMapContainer".format(EPIC))
+            
+            container = self.epic_map[EPIC]
+            index = self.containers.index(container)
+            self.exclusions.append(self.containers.pop(index))    
+
+    def include_epic(self, *EPICs):
+
+        if not len(EPICs):
+            return 0
+
+        if EPICs[0] == 'all':
+            return self.include_epic(*[cont.EPIC for cont in self.exclusions])
+
+        excludable = [cont.EPIC for cont in self.exclusions]
+        for EPIC in EPICs:
+            if EPIC not in excludable:
+                raise KeyError("{} not in PixMapContainer exclusions".format(EPIC))
+            index = excludable.index(EPIC)
+            self.containers.append(self.exclusions.pop(index))
+            excludable.pop(index)
+
+        return len(excludable)
+
+    def __in__(self, other):
+
+        return other in self.epic_map
+
+    def load(self, *fields, **kwargs):
                 
-        for i, hdu in enumerate(getPixels(self.objs.iterkeys(), self.ccd.campaign)):
+        bar = None
+        failures = []
+        if 'bar' in kwargs:
+            bar = kwargs['bar']
+        epics = self.objs.iterkeys
+        for i, (epic, hdu) in enumerate(zip(epics(), getPixels(epics(), self.ccd.campaign))):
             if bar is not None:
                 bar.update_bar(1.0*i/len(self.objs.keys()))
-            self.containers.append(BasicFitsContainer('PIX', hdu, self.ccd.field))
+            if hdu is None:
+                warnings.warn("Target Pixels for 'EPIC {}' failed to download sucessfully.".format(epic))
+                continue
+            self.containers.append(BasicFitsContainer('PIX', hdu, self.ccd.field, *fields))
             hdu.close()
             del hdu
             gc.collect()
+        self.epic_map = {container.EPIC:container for container in self.containers}
 
     def __getitem__(self, i):
-        return self.containers[i]
+
+        if type(i) is int:
+            return self.containers[i]
+
+        return self.epic_map[i]
     
+
     def __len__(self):
-        return len(self.objs.keys())
+        return len(self.epic_map.keys())
 
     def __iter__(self):
         if self.isgenerator:
@@ -620,13 +700,75 @@ class PixelMapContainer:
         else:
             for c in self.containers:
                 yield c
-        
+    
+    def save(self, hdf5_file, doc=None, clobber=False):
+
+        loader = LoadingBar()
+        loader.set_as_bar()
+        mode = 'a'
+        if not os.path.isfile(hdf5_file):
+            mode = 'w'
+        group_name = make_pixel_map_entry(self.ccd)
+        with h5py.File(hdf5_file, mode) as f:
+            if doc is None:
+                doc = self.__doc__
+            if doc is not None:
+                if mode == 'a':
+                    f.attrs['/'.join((group_name, 'doc'))] = doc
+                else:
+                    f.create_dataset('/'.join((group_name,'doc')), data=doc)
+            print("  Writing... (Do Not Turn off Device or Stop Kernel)\n")
+            excludable = [cont.EPIC for cont in self.exclusions]
+            self.include_epic(*excludable)
+            with loader as l:
+                for i, g in enumerate(self):
+                    name = "/".join((group_name, str(g.EPIC)))
+                    if name not in f: # maybe have an overwrite flag?
+                        f.create_dataset(name+'/idx', data=np.array([g.m,g.n,g.row,g.col]))
+                        f.create_dataset(name+'/data', data=g.pixels)
+                    elif clobber:
+                        f.attrs[name+'/idx'] = np.array([g.m, g.n, g.row, g.col])
+                        f.attrs[name+'/data'] = g.pixels
+                    l.update_bar(i*1.0/len(self))
+                l.update_bar(1)
+            self.exclude_epic(*excludable)
+
+        return self.ccd
+
+    @classmethod
+    def from_hdf5(cls, hdf5_file, ccd):
+        '''load an hdf5 file saved with .save''' 
+        cont = PixelMapContainer(ccd, init=False)
+        directory = make_pixel_map_entry(ccd)
+        with h5py.File(hdf5_file, 'r') as f:
+            group = f[directory]
+            if 'doc' in group:
+                cont.__doc__ = group['doc']
+            for epic in group:
+                if epic == 'doc':
+                    continue
+                obj = group[epic]
+                kwargs = {key:value for key, value in zip(['m','n','row','col'], np.array(obj['idx']))}
+                #m, n, row, col = np.array(group[epic]['idx'])
+                kwargs.update({'pixels': np.array(obj['data']), 'EPIC':int(epic)})
+                #pixels = np.array(group[epic]['data'])
+                #hdu = BasicFitsContainer(None, pixels=pixels, m=m, n=n, row=row, col=col, EPIC=int(epic))
+                hdu = BasicFitsContainer(None, **kwargs)
+                cont.containers.append(hdu)
+            gc.collect()    
+
+        cont.epic_map = {container.EPIC:container for container in cont}
+
+        return cont   
+ 
 class PixMapGenerator:
         
     def __init__(self, PixContainer, cache=False):
-        
+
+        if type(PixContainer) is CCD:
+            PixContainer = PixelMapContainer(ccd)       
         self.buff = np.zeros((1150,1150), dtype=np.float64)
-        self.containers = PixContainer.containers
+        self.containers = PixContainer
         self.ccd = PixContainer.ccd
         self.stats = None
         self.cache = cache # should we cache returned items
@@ -634,7 +776,6 @@ class PixMapGenerator:
             self.pixel_distribution_buffered = [False]*N
             self.pixel_distribution = [0]*N
 
-        
     def __iter__(self):
         for i in xrange(N):
             yield self[i]
@@ -718,6 +859,15 @@ def make_pixel_map_name(ccd):
     assert fi in ["FLUX", "RAW_CNTS"]
     return "K2c{}m{}ch{}_{}".format(ca, mo, ch, "flux" if fi == "FLUX" else "raw")
 
+def make_pixel_map_entry(ccd):
+    '''pixel maps are indexed by 
+        campaign
+        module
+        channel
+    '''
+
+    mo, ch, _, ca = ccd
+    return "{}/{}/{}".format(ca, mo, ch)
 
 def copy_pixel_map(ccd):
     '''run only once, to copy the old save format to the new one'''
