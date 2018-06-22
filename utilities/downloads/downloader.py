@@ -43,7 +43,27 @@ def downloader(urls, ordered=True, nthreads=20):
 	return download_func(urls)
 
 def fits_downloader(urls, ordered=True, nthreads=20):
-	'''download a list of urls and return fits hdus'''
+	'''Download a list of urls and return fits hdus.
+
+	Returns a generator [of generators] of fits hdu lists
+
+	Arguments:
+		urls -- a string or [nested] iterable of strings representing urls
+
+	Keyword arguments:
+		ordered -- output maintains order of urls (default True) 
+		nthreads -- number of maximum concurrent download threads (default 20)
+	
+	Additional notes:
+		* Setting `ordered` to `False` will allow the downloader to retrieve
+		files much more rapidly at the expense of random ordering of outputs.
+		* Setting nthreads too high may result in errors as the targeted server
+		may deny requests, though the GIL bottleneck of the fits processing
+		should limit this.
+		* When nested iterables of urls are submitted, nested generators of 
+		generators are returned by the function.
+
+	'''
 	assert nthreads > 0, "nthreads must be greater than 0, but got '{}'".format(nthread)
 	assert type(nthreads) is int, "nthreads must be in integer but got '{}'".format(type(nthreads))
 
