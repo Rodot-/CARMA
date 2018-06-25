@@ -5,7 +5,7 @@ Author: Jack O'Brien
 Date: 10/19/2017
 
 Execution: python 2.7
-Requires: numpy, matplotlib, JacksTools
+Requires: numpy, matplotlib
 
 Usage:
 	Can plot a field from a campaign
@@ -16,11 +16,9 @@ import os
 import csv
 import numpy as np
 from matplotlib.pyplot import subplots, show
+from . import data
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.join(BASE_DIR, '../data')
-FOOTPRINT_FILE=os.path.join(BASE_DIR,"k2-footprint.csv")
+FOOTPRINT_FILE = data.K2_FOOTPRINT
 
 def load_fields(footprint_file):
 	'''load up the kepler fields of view from the csv file'''
