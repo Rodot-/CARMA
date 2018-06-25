@@ -1,14 +1,7 @@
-# CARMA
+# K2 Utilities
 
-## Some Tasks to Work on:
+A small library of classes and functions for working with K2 data more efficiently.
+A few ipython notebook tutorials have been included to get your started.
 
-	1. ICA on K2 AGN LCs to classify and resolve systematics
+The repo will be renamed at some point, as the current name if left over from another project.
 
-		a. Try running ICA on all objects
-		b. Associate ICA component weights with positions on the CCD, (RA/DEC, module, channel, etc)
-		c. Use KDE to build a kernel that can be selected from based on position parameters
-		d. Use KDE result to coeect light curves based on position
-
-	2. Effects of sampling on CARMA parameters
-
-	3. Comparison of various processing of LCs from raw data, including our own
