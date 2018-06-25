@@ -1,4 +1,7 @@
 '''general tools for searching campaigns'''
+import csv
+import urllib2
+import re
 
 def search_proposal(Proposal, campaign = 8): 
 	'''Seach a proposal number for EPIC IDs, 

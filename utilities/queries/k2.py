@@ -1,5 +1,6 @@
 '''for querying k2 with mast'''
 from mast import Query as Query_
+import os
 
 class Query(Query_):
 
