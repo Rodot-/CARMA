@@ -188,8 +188,10 @@ class PixelMapContainer:
 
 	def __iter__(self):
 		if self.isgenerator:
-			for hdu in getPixels(self.objs.iterkeys(), self.ccd.campaign):
-				yield BasicFitsContainer(hdu, self.ccd.field)
+			epics = self.objs.iterkeys
+			hdus = fits_downloader([tpf(epic, self.ccd.campaign) for epic in epics()])
+			for hdu in hdus:
+				yield BasicFitsContainer('PIX', hdu, self.ccd.field)
 				hdu.close()
 				del hdu
 				gc.collect()
@@ -199,8 +201,8 @@ class PixelMapContainer:
 
 	def save(self, hdf5_file, doc=None, clobber=False):
 
-		loader = LoadingBar()
-		loader.set_as_bar()
+		#loader = LoadingBar()
+		#loader.set_as_bar()
 		mode = 'a'
 		if not os.path.isfile(hdf5_file):
 			mode = 'w'
@@ -216,17 +218,16 @@ class PixelMapContainer:
 			print("  Writing... (Do Not Turn off Device or Stop Kernel)\n")
 			excludable = [cont.EPIC for cont in self.exclusions]
 			self.include_epic(*excludable)
-			with loader as l:
-				for i, g in enumerate(self):
-					name = "/".join((group_name, str(g.EPIC)))
-					if name not in f: # maybe have an overwrite flag?
-						f.create_dataset(name+'/idx', data=np.array([g.m,g.n,g.row,g.col]))
-						f.create_dataset(name+'/data', data=g.pixels)
-					elif clobber:
-						f.attrs[name+'/idx'] = np.array([g.m, g.n, g.row, g.col])
-						f.attrs[name+'/data'] = g.pixels
-					l.update_bar(i*1.0/len(self))
-				l.update_bar(1)
+			for i, g in enumerate(self):
+				name = "/".join((group_name, str(g.EPIC)))
+				if name not in f: # maybe have an overwrite flag?
+					f.create_dataset(name+'/idx', data=np.array([g.m,g.n,g.row,g.col]))
+					f.create_dataset(name+'/data', data=g.pixels)
+				elif clobber:
+					f.attrs[name+'/idx'] = np.array([g.m, g.n, g.row, g.col])
+					f.attrs[name+'/data'] = g.pixels
+				#l.update_bar(i*1.0/len(self))
+			#l.update_bar(1)
 			self.exclude_epic(*excludable)
 
 		return self.ccd
@@ -268,12 +269,14 @@ class PixMapGenerator:
 		self.ccd = PixContainer.ccd
 		self.stats = None
 		self.cache = cache # should we cache returned items
+		N = len(self.containers[0].pixels)
+		self.N = N
 		if cache:
 			self.pixel_distribution_buffered = [False]*N
 			self.pixel_distribution = [0]*N
 
 	def __iter__(self):
-		for i in xrange(N):
+		for i in xrange(self.N):
 			yield self[i]
 
 	def __len__(self):
