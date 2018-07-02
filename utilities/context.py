@@ -1,5 +1,9 @@
 '''small library of custom context managers'''
-
+import thread
+import time
+import sys
+from copy import copy
+import numpy as np
 
 class LoadingBar:
 
@@ -20,6 +24,20 @@ class LoadingBar:
 		if bar:
 			self.set_as_bar()
 
+
+	def load(self, iterable):
+		'''automattically create a loading bar when iterating over some iterable'''
+		if hasattr(iterable, '__len__'):
+			self.set_as_bar()
+			N = len(iterable)
+			with self:
+				for i, item in enumerate(iterable):
+					yield item
+					self.update_bar(1.0*i/N)
+		else:
+			with self:
+				for item in iterable:
+					yield item
 
 	def print_loading_bar(self):
 
