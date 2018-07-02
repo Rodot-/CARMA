@@ -17,8 +17,36 @@ import csv
 import numpy as np
 from matplotlib.pyplot import subplots, show
 from . import data
+from ccd import CCD
 
 FOOTPRINT_FILE = data.K2_FOOTPRINT
+
+# Now we'll look at functions for extracting target pixels based on the module
+
+def moduleFilter(ccd):
+    K2FOV = Field(ccd.campaign)
+    channel = Field.get_channels(ccd.module)[ccd.channel]
+    def _filter(item):
+        ra, dec = item[1][1:]
+        if ra > 180: ra -= 180
+        mod, chan = K2FOV.test_point(ra,dec)
+        return (ccd.module == mod) and (chan == channel)
+    return _filter
+
+
+def getObjects(ccd):
+    '''input arg "channel" now refers to an index 0-3'''
+    channel = Field.get_channels(ccd.module)[ccd.channel]
+    objs = searchProposal("GO", ccd.campaign)
+    printv("Found {} objects from VJ database".format(len(objs)))
+    n_objs = len(objs)
+    objs.update(search("../data/GO_all_campaigns_to_date_extra.csv"))
+    printv("Found {} objects from GO_all_campaigns_to_date.csv".format(len(objs)-n_objs))
+    n_objs = len(objs)
+    objs = dict(filter(moduleFilter(ccd), objs.iteritems()))
+    printv("Removed {} objects from outside the ccd region".format(n_objs-len(objs)))
+    return objs
+
 
 def load_fields(footprint_file):
 	'''load up the kepler fields of view from the csv file'''

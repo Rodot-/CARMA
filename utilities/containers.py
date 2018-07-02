@@ -18,7 +18,8 @@ def moduleFilter(ccd):
     K2FOV = Field(ccd.campaign)
     channel = Field.get_channels(ccd.module)[ccd.channel]
     def _filter(item):
-        ra, dec = item[1][1:]
+		ra, dec = item[1][1:]
+        if ra > 180: ra -= 180
         mod, chan = K2FOV.test_point(ra,dec)
         return (ccd.module == mod) and (chan == channel)
     return _filter
