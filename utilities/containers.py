@@ -15,28 +15,28 @@ from k2fov import Field
 # We'll look at functions for extracting target pixels based on the module
 
 def moduleFilter(ccd):
-    K2FOV = Field(ccd.campaign)
-    channel = Field.get_channels(ccd.module)[ccd.channel]
-    def _filter(item):
+	K2FOV = Field(ccd.campaign)
+	channel = Field.get_channels(ccd.module)[ccd.channel]
+	def _filter(item):
 		ra, dec = item[1][1:]
-        if ra > 180: ra -= 180
-        mod, chan = K2FOV.test_point(ra,dec)
-        return (ccd.module == mod) and (chan == channel)
-    return _filter
+		if ra > 180: ra -= 180
+		mod, chan = K2FOV.test_point(ra,dec)
+		return (ccd.module == mod) and (chan == channel)
+	return _filter
 
 
 def getObjects(ccd):
-    '''input arg "channel" now refers to an index 0-3'''
-    channel = Field.get_channels(ccd.module)[ccd.channel]
-    objs = search.search_proposal("GO", ccd.campaign)
-    #printv("Found {} objects from VJ database".format(len(objs)))
-    n_objs = len(objs)
-    objs.update(search.search_file(data.FULL_TARGET_LIST, ccd.campaign))
-    #printv("Found {} objects from GO_all_campaigns_to_date.csv".format(len(objs)-n_objs))
-    n_objs = len(objs)
-    objs = dict(filter(moduleFilter(ccd), objs.iteritems()))
-    #printv("Removed {} objects from outside the ccd region".format(n_objs-len(objs)))
-    return objs
+	'''input arg "channel" now refers to an index 0-3'''
+	channel = Field.get_channels(ccd.module)[ccd.channel]
+	objs = search.search_proposal("GO", ccd.campaign)
+	#printv("Found {} objects from VJ database".format(len(objs)))
+	n_objs = len(objs)
+	objs.update(search.search_file(data.FULL_TARGET_LIST, ccd.campaign))
+	#printv("Found {} objects from GO_all_campaigns_to_date.csv".format(len(objs)-n_objs))
+	n_objs = len(objs)
+	objs = dict(filter(moduleFilter(ccd), objs.iteritems()))
+	#printv("Removed {} objects from outside the ccd region".format(n_objs-len(objs)))
+	return objs
 
 class BasicFitsContainer(object):
 
@@ -346,12 +346,12 @@ def bin_pixel_buffer(buff, new_shape):
 	return new_buff
 
 def make_pixel_map_entry(ccd):
-    '''pixel maps are indexed by 
-        campaign
-        module
-        channel
-    '''
-    mo, ch, _, ca = ccd
-    return "{}/{}/{}".format(ca, mo, ch)
+	'''pixel maps are indexed by 
+		campaign
+		module
+		channel
+	'''
+	mo, ch, _, ca = ccd
+	return "{}/{}/{}".format(ca, mo, ch)
 
 
