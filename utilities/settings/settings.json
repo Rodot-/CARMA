@@ -1,0 +1,11 @@
+{
+    "LOGGING": {
+        "logfile": "k2.log", 
+        "__doc__": "Logging level: int 0-2\n0: Do not log (Default)\n1: Log Command Usage\n2: Log all verbosity information", 
+        "level": 0
+    }, 
+    "VERBOSE": {
+        "__doc__": "Verbosity level: int 0-2\n0: Default Python Warnings and Errors (Default)\n1: LoadingBars and Formatted Runtime info for logging\n2: In-depth run-time info for debugging", 
+        "level": 0
+    }
+}
