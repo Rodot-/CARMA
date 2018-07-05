@@ -5,35 +5,9 @@ functions for generating custom representations of K2 "Pixel Light Curves"
 from PixMapGenerators to be sent to functions for plotting or further analysis
 '''
 
-from itertools import izip
+from itertools import izip, imap, ifilter
 import numpy as np
-from multiprocessing.pool import ThreadPool
 
-def _apply_stat_func(apply_stat_func_info):
-
-	y, stat_func = apply_stat_func_info
-	return stat_func(y)
-
-def _get_cut_mask(get_cut_info):
-
-	i, indices = get_cut_info
-	mask = indices == i
-	return mask	
-
-def _get_cuts(get_cuts_info):
-
-	indices, lc, y = get_cuts_info
-	for i, lc_p in enumerate(lc):
-		mask = indices == i
-		#cut_mask_args = [(i, indices) for i in xrange(len(lc))]
-		#for mask, lc_p in izip(P4.imap(_get_cut_mask, cut_mask_args), lc):
-		if mask.any():
-			yield y[mask], lc_p
-
-P = ThreadPool(8) # computing stats
-P2 = ThreadPool(8) # computing over epochs
-P3 = ThreadPool(8) # computing unordered data
-P4 = ThreadPool(8) # compute masks
 
 def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 	'''return a numpy array of statistics of binned pixels at every cadence
@@ -50,7 +24,6 @@ def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 			(L+2): First 2 arrays are the bin edges
 	'''
 
-
 	if flux_range is not None:
 		lower, higher = sorted(flux_range)
 
@@ -65,50 +38,117 @@ def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 	lc = np.empty((N, M, L+2))
 	lc[::] = np.nan
 
-	def _filter_lc_epoch(epoch):
+	l_bin_edges = np.empty((gen.N, len(percentiles)))
 
-		i, y = epoch
+	def _get_epochs():
 
 		if flux_range is not None:
-			mask = (y > lower) & (y < higher)
-		else:
-			mask = np.ones(len(y), dtype=np.bool)	
+			return _get_filtered_epochs()
 
-		if mask.any():
+		return _get_full_epochs()
 
-			return y[mask], lc[i]
+	def _get_full_epochs():
 
-	def _digitize_epoch(epoch):
+		for i, g in enumerate(imap(gen.get_unordered, xrange(gen.N))):
 
-		y, lc = epoch
-		p = np.percentile(y, percentiles)
-		p[-1] += 1e-14 # to make sure we include all data
-		lc[:,:2] = zip(p[:-1], p[1:])
+				yield g
 
-		indices = np.digitize(y, p)
+	def _get_filtered_epochs():
+
+		for i, g in enumerate(imap(gen.get_unordered, xrange(gen.N))):
+
+			mask = (g > lower) & (g < higher)
+			yield g[mask]
+
+	epochs = list(_get_epochs())
+
+	lengths = np.array(map(len, epochs))
+	unique_lengths = np.unique(lengths[lengths!=0])
+
+	for length in unique_lengths:
+
+		l_index = np.where(lengths == length)[0]
+		l_uniform_array = np.asarray([epochs[i] for i in l_index]) 
+
+		l_bin_edges[l_index] = np.percentile(l_uniform_array, percentiles, axis=1).T
+		l_bin_edges[l_index,-1] += 1e-10
+
+		lc[l_index,:,0] = l_bin_edges[l_index,:-1]
+		lc[l_index,:,1] = l_bin_edges[l_index,1:]	
+
+		for lc_epoch, y, bin_edges in izip(lc[l_index], l_uniform_array, l_bin_edges[l_index]):		
+
+			indices = np.digitize(y, bin_edges)-1 # digitize offsets the index
+
+			bin_counts = np.bincount(indices) # try to arrange arrays so that we can compute stats in parallel
+			same_counts = np.unique(bin_counts[bin_counts!=0])
+
+			for count in same_counts:
+
+				index = np.where(bin_counts == count)[0]
+				uniform_array = np.asarray([y[i==indices] for i in index])
+
+				lc_epoch[index, 2:] = np.array([stat_func(uniform_array, axis=1) for stat_func in stat_funcs]).T
 	
-		def _cut_epochs(index):
+	return lc
 
-			mask = index == indices
-			if mask.any():
-
-				def _compute_stat(stat_func):
-
-					return stat_func(y[mask])
-
-				lc[index][2:] = P4.map(_compute_stat, stat_funcs)
+def get_pixel_lc_old(gen, percentiles, mag_range=None):
+	'''percentiles is a flat array of percentiles ranging from 0 to 100'''
+	N = gen.N
+	higher, lower = None, None
+	if mag_range is None:
+		higher, lower = np.inf, -np.inf
+		mag_range = (lower, higher)
+	else:
+		higher, lower = magToFlux(np.array(sorted(mag_range)))
+	if np.inf in mag_range:
+		lower = -np.inf
+	
+	ccd = gen.ccd
+	M = len(percentiles)-1
+	
+	lc = np.empty((N,M,5)) # min, max, var, median, mean
+	lc[::] = np.nan
 		
-		return (i for i in P2.imap(_cut_epochs, xrange(len(lc))) if i is not None)
-
-
-	epochs = ((i,gen.get_unordered(i)) for i in xrange(gen.N))
-	good_epochs = (i for i in P.imap(_filter_lc_epoch, epochs) if i is not None)
-	cut_epochs = P3.imap(_digitize_epoch, good_epochs)	
-	for cut_epoch in cut_epochs:
-		pass
+	funcs = (np.var, np.median, np.mean)
+	N = len(gen.containers.containers[0].pixels)
+	
+	for i,g in enumerate((gen.get_unordered(i) for i in xrange(N))):
+		m = (g > lower) & (g < higher)
+		if m.any():
+			p = np.percentile(g[m], percentiles)
+			lc[i,:,:2] = zip(p[:-1], p[1:])
+			
+			# New
+			for j, (low, high) in enumerate(lc[i,:,:2]):
+				if j+1 == M:
+					high += 1
+				cut = g[(g >= low) & (g < high)]
+				if len(cut):
+					lc[i,j,2] = np.var(cut)
+					lc[i,j,3] = np.median(cut)
+					#lc[i,j,4] = np.dot(cut,np.ones(len(cut)))/len(cut)
+					lc[i,j,4] = np.mean(cut)
+					#lc[i,j,5] = len(cut)
 
 	return lc
 
+
+import time
+class Timeit:
+
+
+	def __init__(self, name=None):
+
+		self.name = (' '+name) if name is not None else ''
+
+	def __enter__(self):
+
+		self.T0 = time.clock()
+
+	def __exit__(self, *args):
+
+		print "Time to run{}:".format(self.name), time.clock() - self.T0
 
 def test():
 	from .. import containers
@@ -120,21 +160,34 @@ def test():
 	ccd = CCD(campaign=8, module=6, channel=2, field='FLUX')
 	print "  ", ccd
 	print "Making Container"
-	cont = containers.PixelMapContainer.from_hdf5('K2PixelMap_Camp8_Mod6_Chan2.hdf5', ccd)
+	cont = containers.PixelMapContainer.from_hdf5('K2PixelMap.hdf5', ccd)
 	print "  ", cont
 	print "Making Generator"
 	gen = containers.PixMapGenerator(cont)
 	print "  ", gen
 
-	percentiles = np.linspace(0,100,50)
-	stat_funcs = (np.median, np.mean, np.std)
+	percentiles = np.linspace(0,100,1000)
+
+	def len_func(x, axis=0):
+		return [len(i) for i in x]
+
+	stat_funcs = (np.var, np.median, np.mean)
+	#stat_funcs = None
 	print "Making lc"
 	T0 = time.clock()
 	lc = get_pixel_lc(gen, percentiles, stat_funcs=stat_funcs)
 	#print "  ", lc
 	print "   Made lc in {} seconds".format(time.clock()-T0)
+	T0 = time.clock()
+	lc2 = get_pixel_lc_old(gen, percentiles)
+	print "   Made lc2 in {} seconds".format(time.clock()-T0)
+
+	print "Max Diff:", np.nanmax(np.abs(lc-lc2))
+	print "Sum Diff:", np.nansum(np.abs(lc-lc2))	
+
 	pdb.set_trace()
 
 if __name__ == '__main__':
 
+	#benchmark()
 	test()
