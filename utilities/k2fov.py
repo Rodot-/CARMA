@@ -28,7 +28,7 @@ def moduleFilter(ccd):
     channel = Field.get_channels(ccd.module)[ccd.channel]
     def _filter(item):
         ra, dec = item[1][1:]
-        if ra > 180: ra -= 360
+        #if ra > 180: ra -= 360
         mod, chan = K2FOV.test_point(ra,dec)
         return (ccd.module == mod) and (chan == channel)
     return _filter
@@ -131,8 +131,9 @@ class Field:
 		''' get the footprint of a campaign '''
 		fp = self.data[self.data['campaign'] == campaign]
 		# Place RA on scale from -180 to 180 in degrees
-		if any(ra > 180 for i in '0123' for ra in fp['ra'+i]):
-			for i in '0123': fp['ra'+i][::] -= 360
+		# actually, let's not to that, it's a silly thing to do
+		#if any(ra > 180 for i in '0123' for ra in fp['ra'+i]):
+		#	for i in '0123': fp['ra'+i][::] -= 360
 		return fp
 
 	def __test_channel(self, idx, ra, dec):
