@@ -23,8 +23,12 @@ def search_proposal(Proposal, campaign = 8):
 def search_file(target_file, campaign=8): 
 	'''Search a k2 target list file for objects in a certain campaign'''
 	with open(target_file,'r') as f: 
-		reader = csv.DictReader(f) 
-		data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)]))) 
+		reader = csv.DictReader(f)
+		if campaign == 91:
+			campaign = str('9a')
+		elif campaign == 92:
+			campaign = str('9b') 
+		data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)])))  # the strips are a hack so I don't have to admit to myself that campaign number should be a str
 	EPIC = data['EPIC ID'] 
 	func = lambda x: float(x) if (x and x not in ['None',' ']) else None 
 	RA = map(func, data['RA (J2000) [deg]']) 

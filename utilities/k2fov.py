@@ -24,6 +24,8 @@ FOOTPRINT_FILE = data.K2_FOOTPRINT
 # Now we'll look at functions for extracting target pixels based on the module
 
 def moduleFilter(ccd):
+		if ccd.campaign in (91, 92):
+			ccd = CCD(module=ccd.module, channel=ccd.channel, field=ccd.field, campaing=9)
     K2FOV = Field(ccd.campaign)
     channel = Field.get_channels(ccd.module)[ccd.channel]
     def _filter(item):
@@ -71,6 +73,8 @@ class Field:
 
 	def __init__(self, campaign, cache_data=True):
 
+		if 90 < campaign < 93:
+			campaign = 9 
 		self.campaign = campaign
 		self.cache = cache_data
 		self.footprint = self._get_campaign(campaign)

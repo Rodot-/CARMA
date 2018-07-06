@@ -15,7 +15,9 @@ from k2fov import Field
 # We'll look at functions for extracting target pixels based on the module
 
 def moduleFilter(ccd):
-	K2FOV = Field(ccd.campaign)
+	if ccd.campaign in (91, 92):
+			ccd = CCD(module=ccd.module, channel=ccd.channel, field=ccd.field, campaing=9)
+  K2FOV = Field(ccd.campaign)
 	channel = Field.get_channels(ccd.module)[ccd.channel]
 	def _filter(item):
 		ra, dec = item[1][1:]
