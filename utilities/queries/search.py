@@ -2,6 +2,7 @@
 import csv
 import urllib2
 import re
+import numpy as np
 
 def search_proposal(Proposal, campaign = 8): 
 	'''Seach a proposal number for EPIC IDs, 
@@ -25,14 +26,14 @@ def search_file(target_file, campaign=8):
 	with open(target_file,'r') as f: 
 		reader = csv.DictReader(f)
 		if campaign == 91:
-			campaign = str('9a')
+			campaign = '9a'
 		elif campaign == 92:
-			campaign = str('9b') 
-		data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)])))  # the strips are a hack so I don't have to admit to myself that campaign number should be a str
+			campaign = '9b' 
+		data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)]))) 
 	EPIC = data['EPIC ID'] 
-	func = lambda x: float(x) if (x and x not in ['None',' ']) else None 
+	func = lambda x: float(x) if (x and x not in ['None',' ']) else np.nan 
 	RA = map(func, data['RA (J2000) [deg]']) 
 	DEC = map(func, data['Dec (J2000) [deg]']) 
 	MAG = map(func, data['magnitude']) 
-	return {int(epic): (mag, ra, dec) for epic, mag, ra, dec in zip(EPIC, MAG, RA, DEC) if None not in (mag, ra, dec)} 
+	return {int(epic): (mag, ra, dec) for epic, mag, ra, dec in zip(EPIC, MAG, RA, DEC) if np.nan not in (ra, dec)} 
 
