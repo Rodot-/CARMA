@@ -26,7 +26,7 @@ TYPE_MAP = {
 	'string': str,
 	'substring': str,
 	'ra': lambda ra: Longitude(ra, unit=hourangle),
-	'dec': lambda dec: Longitude(dec, unit=deg),
+	'dec': lambda dec: Latitude(dec, unit=deg),
 	'ustring': unicode,
 	'datetime': lambda date: datetime.datetime.strptime(date, '%Y-%m-%d %X'),
 	'float': float
@@ -40,7 +40,7 @@ class Query:
 	archive_url = "https://archive.stsci.edu"
 	column_header = ['Column Name', 'Column Label', 'Description', \
 					'Examples/Valid Values', 'Units']
-	output_format = 'outputformat=CSV&'
+	output_format = 'outputformat=CSV&max_records=25000&'
 	search_str = 'search.php?action=Search&' + output_format
 	field_url = os.path.join(archive_url, 'search_fields.php?')
 
@@ -76,18 +76,20 @@ class Query:
 		socket = urllib2.urlopen(url)
 
 		# Should end here
-		reader = csv.reader(socket, delimiter=',')
+		#reader = csv.reader(socket, delimiter=',')
 		return self.iter_read_socket(socket)
-	
-		#header = reader.next()
-		#types = reader.next()
-		#rows = []
-		# I guess this is good for now
-		#for i,line in enumerate(reader):
-		#	rows.append([TYPE_MAP[t](l) if l else None for t, l in zip(types, line)])
-		#socket.close()
 
-		#return dict(zip(header, zip(*rows)))
+	@classmethod
+	def to_table(cls, reader):
+		'''converts a csv iterator to a formatted table'''
+	
+		header = reader.next()
+		types = reader.next()
+		rows = []
+		for i,line in enumerate(reader):
+			rows.append([TYPE_MAP[t](l) if l else None for t, l in zip(types, line)])
+
+		return dict(zip(header, zip(*rows)))
 
 	def iter_read_socket(self, socket):
 
