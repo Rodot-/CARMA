@@ -17,24 +17,23 @@ class Query(Query_):
 
 def test(): 
  
-	k2 = QueryK2() 
+	k2 = Query() 
 	k2.print_fields() 
-	tab = k2.query_MAST(sci_ra='>10.34,<11.34', sci_dec='>-24.45,<-23.45') 
+	tab = k2.to_table(k2.query_MAST(sci_ra='10.34..11.34', sci_dec='-24.45..-23.45'))
 	k2.query_MAST(sci_ra='4.34,14', sci_dec=-24.45) 
 	k2.query_MAST(sci_ra=14.34, sci_ec=-24.45) 
 	k2.query_MAST(sc_ra=14.34, sci_ec=-24.45) 
 	keys = ('K2 ID','Dataset Name','KEP Mag','Object type','Target Type') 
-	print keys 
 	for i in xrange(100): 
 		print [tab[key][i] for key in keys] 
  
 def play(): 
  
-	k2 = QueryK2() 
-	table = k2.query_MAST(sci_campaign=8, kp='>16,>19', imag='>19') 
+	k2 = Query() 
+	table = k2.to_table(k2.query_MAST(sci_campaign=8, kp='16..19', imag='>19'))
 	keys = ('K2 ID','Dataset Name','KEP Mag','Object type','R Mag') 
-	print keys 
-	for i in xrange(100): 
+	print keys
+	for i in xrange(len(table.values()[0])): 
 		print [table[key][i] for key in keys] 
  
  
