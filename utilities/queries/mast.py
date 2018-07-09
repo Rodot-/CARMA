@@ -14,6 +14,8 @@ import datetime
 from astropy.units import hourangle, deg
 from astropy.coordinates import Longitude, Latitude
 
+from .. import radec
+
 #TODO: networking in context manager to handle network errors
 
 class Query:
@@ -25,8 +27,10 @@ TYPE_MAP = {
 	'integer': int,
 	'string': str,
 	'substring': str,
-	'ra': lambda ra: Longitude(ra, unit=hourangle),
-	'dec': lambda dec: Latitude(dec, unit=deg),
+	#'ra': lambda ra: Longitude(ra, unit=hourangle),
+	#'dec': lambda dec: Latitude(dec, unit=deg),
+	'ra': lambda ra: radec.ra(ra, to='deg'),
+	'dec': lambda dec: radec.dec(dec, to='deg'),
 	'ustring': unicode,
 	'datetime': lambda date: datetime.datetime.strptime(date, '%Y-%m-%d %X'),
 	'float': float

@@ -116,6 +116,22 @@ def getSign(match):
 
 	return '+' if match.group('s') in (None,'+') else '-'
 
+def ra(coord, to='hms'):
+
+	raw = Parser.parse_coord(coord, pattern='ra')
+	if to == 'hms':
+		return ' '.join(map(str, raw[0])) 
+	elif to == 'deg':
+		return raw[1]
+
+def dec(coord, to='dms'):
+
+	raw = Parser.parse_coord(coord, pattern='dec')
+	if to == 'dms':
+		return raw[0]+' '.join(map(str, raw[1])) 
+	elif to == 'deg':
+		return raw[2]*{'-':-1,'+':1}[raw[0]]
+
 class Parser:
 	'''Handles String Parsing and Unit Conversions'''
 
@@ -137,9 +153,60 @@ class Parser:
 	patterns['combined'] = [' *'.join((ra,dec)) for ra, dec in zip(patterns['ra'], patterns['dec'])]
 
 	@classmethod
-	def parse(cls, string):
+	def parse_coord(cls, string, pattern='combined'):
 
-		for i, pattern in enumerate(cls.patterns['combined']):
+		use_ra = pattern in ('ra', 'combined')
+		use_dec = pattern in ('dec', 'combined')
+		for i, pattern in enumerate(cls.patterns[pattern]):
+			match = re.match(pattern, string)
+			if match is not None:
+				if use_dec:
+					sign = getSign(match) # get the sign of the dec
+				get = match.group # function that retrieves the regex matches
+				printE("Got a match in {}".format(pattern))
+				printE("regex match groups: {}".format(match.groups()))
+				if use_dec:
+					printE("Sign: {}, {}".format(sign, match.group('s')))
+				try:
+					if i == 0: # hms, dms
+						if use_ra:
+							ra = hmsToDeg(*get('rh','rm','rs'))
+						if use_dec:
+							dec = dmsToDeg(*get('dd','dm','ds'))
+					elif i == 1: # Deg
+						if use_ra:
+							ra = float(get('ra'))
+						if use_dec:
+							dec = float(get('dec'))
+			
+					if use_ra:
+						hms = degTohms(ra)
+					if use_dec:
+						dms = degTodms(dec)
+				except OutOfBoundsError as err:
+					print("OutOfBoundsError: {}".format(err), file=sys.stderr)
+					return None
+
+				break
+		else:
+			raise BadPatternError("Could not match input to an existing template")
+		result = []
+		if use_dec:
+			result.append(sign)
+		if use_ra:
+			result.append(hms)
+		if use_dec:
+			result.append(dms)
+		if use_ra:
+			result.append(ra)
+		if use_dec:
+			result.append(dec)
+		return tuple(result)
+
+	@classmethod
+	def parse(cls, string, pattern='combined'):
+
+		for i, pattern in enumerate(cls.patterns[pattern]):
 			match = re.match(pattern, string)
 			if match is not None:
 				sign = getSign(match) # get the sign of the dec
