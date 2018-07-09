@@ -44,7 +44,7 @@ class Query:
 	archive_url = "https://archive.stsci.edu"
 	column_header = ['Column Name', 'Column Label', 'Description', \
 					'Examples/Valid Values', 'Units']
-	output_format = 'outputformat=CSV&max_records=25000&'
+	output_format = 'outputformat=CSV&'
 	search_str = 'search.php?action=Search&' + output_format
 	field_url = os.path.join(archive_url, 'search_fields.php?')
 
