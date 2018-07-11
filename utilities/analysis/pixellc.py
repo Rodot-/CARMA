@@ -38,6 +38,7 @@ def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 	lc = np.empty((N, M, L+2))
 	lc[::] = np.nan
 
+
 	l_bin_edges = np.empty((gen.N, len(percentiles)))
 
 	def _get_epochs():
@@ -76,7 +77,7 @@ def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 		lc[l_index,:,0] = l_bin_edges[l_index,:-1]
 		lc[l_index,:,1] = l_bin_edges[l_index,1:]	
 
-		for lc_epoch, y, bin_edges in izip(lc[l_index], l_uniform_array, l_bin_edges[l_index]):		
+		for l, y, bin_edges in izip(l_index, l_uniform_array, l_bin_edges[l_index]):		
 
 			indices = np.digitize(y, bin_edges)-1 # digitize offsets the index
 
@@ -88,8 +89,7 @@ def get_pixel_lc(gen, percentiles, flux_range=None, stat_funcs=None):
 				index = np.where(bin_counts == count)[0]
 				uniform_array = np.asarray([y[i==indices] for i in index])
 
-				lc_epoch[index, 2:] = np.array([stat_func(uniform_array, axis=1) for stat_func in stat_funcs]).T
-	
+				lc[l,index, 2:] = np.array([stat_func(uniform_array, axis=1) for stat_func in stat_funcs]).T
 	return lc
 
 def get_pixel_lc_old(gen, percentiles, mag_range=None):
@@ -134,60 +134,3 @@ def get_pixel_lc_old(gen, percentiles, mag_range=None):
 	return lc
 
 
-import time
-class Timeit:
-
-
-	def __init__(self, name=None):
-
-		self.name = (' '+name) if name is not None else ''
-
-	def __enter__(self):
-
-		self.T0 = time.clock()
-
-	def __exit__(self, *args):
-
-		print "Time to run{}:".format(self.name), time.clock() - self.T0
-
-def test():
-	from .. import containers
-	from ..ccd import CCD
-	import pdb	
-
-	import time
-	print "Making CCD"
-	ccd = CCD(campaign=8, module=6, channel=2, field='FLUX')
-	print "  ", ccd
-	print "Making Container"
-	cont = containers.PixelMapContainer.from_hdf5('K2PixelMap.hdf5', ccd)
-	print "  ", cont
-	print "Making Generator"
-	gen = containers.PixMapGenerator(cont)
-	print "  ", gen
-
-	percentiles = np.linspace(0,100,1000)
-
-	def len_func(x, axis=0):
-		return [len(i) for i in x]
-
-	stat_funcs = (np.var, np.median, np.mean)
-	#stat_funcs = None
-	print "Making lc"
-	T0 = time.clock()
-	lc = get_pixel_lc(gen, percentiles, stat_funcs=stat_funcs)
-	#print "  ", lc
-	print "   Made lc in {} seconds".format(time.clock()-T0)
-	T0 = time.clock()
-	lc2 = get_pixel_lc_old(gen, percentiles)
-	print "   Made lc2 in {} seconds".format(time.clock()-T0)
-
-	print "Max Diff:", np.nanmax(np.abs(lc-lc2))
-	print "Sum Diff:", np.nansum(np.abs(lc-lc2))	
-
-	pdb.set_trace()
-
-if __name__ == '__main__':
-
-	#benchmark()
-	test()
