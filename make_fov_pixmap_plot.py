@@ -13,8 +13,10 @@ base_dir = 'plots'
 if len(sys.argv) > 1:
 	base_dir = sys.argv[1]
 
-image_files = glob.glob(os.path.join(base_dir, 'Module*.png')
-pattern = os.path.join(base_dir, 'Module(\d{1,2})Channel([0-3])PixelMap(Full|Diff).png')
+image_files = glob.glob('Module*.png')
+print(image_files[:])
+#pattern = os.path.join(base_dir, 'Module(\d{1,2})Channel([0-3])PixelMap(Full|Diff).png')
+pattern = str('Module(\d{1,2})Channel([0-3])PixelMap(Full|Diff).png')
 engine = re.compile(pattern)
 matches = (engine.match(file_name).groups() for file_name in image_files)
 data = (np.array(Image.open(file_name)) for file_name in image_files)
@@ -29,39 +31,47 @@ col_bounds = (145, 813)
 WIDTH = col_bounds[1] - col_bounds[0]
 HEIGHT = row_bounds[1] - row_bounds[0]
 
-# Orientation flags
-H = HORIZONTAL = 0
-V = VERTICAL = 1
-
-# Flip Flags
-U = UPRIGHT = 0
-F = FLIPPED = 2
 
 # Padding
 CHANNEL_PAD = 50
 MODULE_PAD = 100
 
 # Final image dimensions
-WIDTH_F = (CHANNEL_PAD + WIDTH) * 10 + (10/2-1) * MODULE_PAD - CHANNEL_PAD
+WIDTH_F = (CHANNEL_PAD + WIDTH) * 10 + (10/2-1) * MODULE_PAD - CHANNEL_PAD+100
 HEIGHT_F = (CHANNEL_PAD + HEIGHT) * 10 + (10/2-1) * MODULE_PAD - CHANNEL_PAD
 
 # Define module flags
-horizontal_modules = [10, 15, 20, 9, 14, 13, 12, 176, 11, 16]
-flipped_modules = [4, 3, 2, 10, 9, 8, 7, 15, 14, 20]
+horizontal_modules = [16,17,11,12,13,6]
+flipped_modules = [14,15,9,10,20,18,19,22,23,24]
+zero_modules = []
+last_modules = [18,19,22,23,24]
 
 def get_coarse_grid_position(module):
 
-	row = (5 - module) % 5
-	col = (module - 1)/5
+	col = (module%5)-1
+	row = (module - 1)/5
 	print "    CP: {}, {}".format(row, col)
 	return row, col
 
-def get_fine_grid_position(coarse_position, channel, O_flag, F_flag):
+def get_fine_grid_position(coarse_position, channel, O_flag, F_flag ,l_flag):
 
 	yp, xp = coarse_position
-	pos = (channel + (O_flag & F_flag)) % 4
-	y = 2*yp + (pos / 2)
-	x = 2*xp + (((pos + 1) % 4) / 2)
+	pos = (channel + (O_flag + F_flag)) % 4 
+	print(coarse_position,channel,pos)
+	y = 2*yp +  ((pos) / 2) - (l_flag*((channel)%2))
+	x = 2*xp + (1-(((pos + 1) % 4) / 2)) - (l_flag*((channel+1)%2))
+	if (l_flag == 1):
+		if(channel == 0):
+			y = 2*yp +  0
+			x = 2*xp + 1
+	if (l_flag == 1): 
+		if (channel == 3):
+			print("TRUEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE") 
+			y = 2*yp +  1
+			x = 2*xp + 1		
+
+	#y = 2*yp + (pos / 2)
+	#x = 2*xp + (((pos + 1) % 4) / 2)
 	print "    FP: {}, {}".format(y, x)
 	return y, x
 
@@ -75,9 +85,12 @@ def get_true_grid_position(fine_position):
 def get_grid_position(image):
 
 	cp = get_coarse_grid_position(image['module'])
-	O_flag = H if image['module'] in horizontal_modules else V
-	F_flag = U if image['module'] not in flipped_modules else F
-	fp = get_fine_grid_position(cp, image['channel'], O_flag, F_flag)
+
+	O_flag = 1 if image['module'] in horizontal_modules else 0
+	O_flag = O_flag if image['module'] not in zero_modules else 1
+	F_flag = 1 if image['module'] in flipped_modules else 2
+	l_flag = 1 if image['module'] in last_modules else 0
+	fp = get_fine_grid_position(cp, image['channel'], O_flag, F_flag, l_flag)
 	y, x = get_true_grid_position(fp)
 
 	return y, x
@@ -96,9 +109,9 @@ for image in images:
 print "Done"
 
 final = Image.fromarray(final_image)
-final.save(os.path.join(base_dir, "K2All%sPixelMaps.png" % TYPE))
+final.save("K2All%sPixelMaps.png" % TYPE)
 
-fig, ax = subplots(1,1, figsize=(16,9), dpi=600)
-ax.imshow(final_image)
-show()
+#fig, ax = subplots(1,1, figsize=(16,9), dpi=600)
+#ax.imshow(final_image)
+#show()
 
