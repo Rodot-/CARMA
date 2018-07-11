@@ -11,6 +11,7 @@ from context import LoadingBar
 from . import data
 from queries import search
 from k2fov import Field
+from itertools import izip
 
 # We'll look at functions for extracting target pixels based on the module
 
@@ -167,7 +168,9 @@ class PixelMapContainer:
 			bar = kwargs['bar']
 		epics = self.objs.iterkeys
 		hdus = fits_downloader([tpf(epic, self.ccd.campaign) for epic in epics()])
-		for i, (epic, hdu) in enumerate(zip(epics(), hdus)):
+		if bar is not None:
+			bar.__enter__()
+		for i, (epic, hdu) in enumerate(izip(epics(), hdus)):
 			if bar is not None:
 				bar.update_bar(1.0*i/len(self.objs.keys()))
 			if hdu is None:
@@ -177,6 +180,8 @@ class PixelMapContainer:
 			hdu.close()
 			del hdu
 			gc.collect()
+		if bar is not None:
+			bar.__exit__()
 		self.epic_map = {container.EPIC:container for container in self.containers}
 
 	def __getitem__(self, i):
