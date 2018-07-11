@@ -13,8 +13,10 @@ def running_func(func):
 		x: input data array
 		N: Smoothing window
 		'''
-		n, m = N/n, N%2
+		n, m = N/2, N%2
 		return np.array([func(x[i-n if i > n else i:i+m+n], **func_kwargs) for i in xrange(len(x))])
+
+	return _wrapper
 
 running_mean = running_func(np.nanmean)
 running_median = running_func(np.nanmedian)
