@@ -4,6 +4,7 @@ plotting.py
 A small collection of convenient plotting functions
 '''
 from smoothing import *
+from copy import copy
 
 def axes_prop_setter(local_vars, *args, **kwargs):
 
@@ -49,11 +50,11 @@ def plot_pixel_lc(ax, lc, smooth=False, image=False, differenced=False, **kwargs
 	'''
 
 	# create the image from the rows of the light curve
-	image_ = lc if not differenced else lc[:, 1:] - lc[:, :-1]
+	image_ = np.copy(lc[::]) if not differenced else lc[:, 1:] - lc[:, :-1]
 	
 	# whiten the light curve
-	image_ -= np.nanmedian(image_, axis=0)
-	image_ /= np.nanstd(image_, axis=0)
+	image_[::] -= np.nanmedian(image_, axis=0)
+	image_[::] /= np.nanstd(image_, axis=0)
 
 	# optionally smooth the light curve
 	if smooth:
