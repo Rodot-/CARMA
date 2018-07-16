@@ -4,12 +4,6 @@ import csv, sys
 from utilities.queries.sky_search import epic_search
 from utilities.queries import k2
 
-CHUNK_SIZE = 500
-
-def chunker(data, chunk_size):
-
-	return [data[i:i+chunk_size] for i in range(0, len(data), chunk_size)]
-
 def build_table(csv_file, outfile=None):
 
 	if outfile is None:
@@ -43,15 +37,6 @@ def build_table(csv_file, outfile=None):
 			index = epic_index_map[str(EPIC)]
 			
 			rows[index][1:4] = map(str, (query[keys[j+1]][i] for j in xrange(3)))
-
-			#ra = str(query[keys[1]][i])
-			#dec = str(query[keys[2]][i])
-			#kp = str(query[keys[3]][i])
-			
-			#rows[index][1] = ra
-			#rows[index][2] = dec
-			#rows[index][3] = kp
-	
 			n_new = i
 
 		with open(outfile,'w') as f:

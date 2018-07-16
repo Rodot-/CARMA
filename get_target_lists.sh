@@ -74,7 +74,7 @@ if [ "$DOWNLOAD" != "" ]; then
 		rm $DEFAULTFILE
 	fi
 	wget "$ARCHIVE" -P "$DEST"
-	sed -i -e 's/, /,/g' $DEFAULTFILE
+	sed -i -e 's/, /,/g' $DEFAULTFILE # Change delimiter to ','
 fi
 
 if [ "$UPDATE" != "" ]; then
