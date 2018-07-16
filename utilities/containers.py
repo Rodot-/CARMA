@@ -31,7 +31,8 @@ def moduleFilter(ccd):
 def getObjects(ccd):
 	'''input arg "channel" now refers to an index 0-3'''
 	channel = Field.get_channels(ccd.module)[ccd.channel]
-	objs = search.search_proposal("GO", ccd.campaign)
+	#objs = search.search_proposal("GO", ccd.campaign)
+	objs = {}
 	#printv("Found {} objects from VJ database".format(len(objs)))
 	n_objs = len(objs)
 	objs.update(search.search_file(data.FULL_TARGET_LIST, ccd.campaign))
