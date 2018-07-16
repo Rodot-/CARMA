@@ -29,6 +29,8 @@ def search_file(target_file, campaign=8):
 			campaign = '9a'
 		elif campaign == 92:
 			campaign = '9b' 
+		elif campaign in (101, 102):
+			campaign = 10
 		data = dict(zip(reader.fieldnames, zip(*[[row[key].strip() for key in reader.fieldnames] for row in reader if row['campaign'] == str(campaign)]))) 
 	EPIC = data['EPIC ID'] 
 	func = lambda x: float(x) if (x and x not in ['None',' ']) else np.nan 
