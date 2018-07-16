@@ -47,7 +47,7 @@ def epic_search(EPICs):
 	TPE = ThreadPoolExecutor(64)
 	chunks = (EPICs[i:i+500] for i in xrange(0, len(EPICs), 500))
 	strings = (','.join(map(str, chunk)) for chunk in chunks)
-	futures = [TPE.submit(k2query.query_MAST, ktc_k2_id=s) for s in strings]
+	futures = [TPE.submit(k2query.query_MAST, ktc_k2_id=s, coordformat='dec') for s in strings]
 	header = None
 	query = []
 	for future in futures:
